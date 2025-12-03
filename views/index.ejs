@@ -1,0 +1,52 @@
+<%- include("partials/header.ejs") %>
+
+<div class="container p-4">
+
+  <h1 class="mb-4 text-center">Quote Finder</h1>
+
+  <form action="/searchByKeyword" class="mb-4">
+    <label class="form-label">Search by Keyword</label>
+    <input type="text" class="form-control" name="keyword" placeholder="Enter a word">
+    <button class="btn btn-primary mt-2">Search</button>
+  </form>
+
+  <form action="/searchByAuthor" class="mb-4">
+    <label class="form-label">Search by Author</label>
+    <select class="form-select" name="authorId">
+      <option value="">Select an Author</option>
+      <% authors.forEach(a => { %>
+        <option value="<%= a.authorId %>">
+          <%= a.firstName %> <%= a.lastName %>
+        </option>
+      <% }) %>
+    </select>
+    <button class="btn btn-primary mt-2">Search</button>
+  </form>
+
+  <form action="/searchByCategory" class="mb-4">
+    <label class="form-label">Search by Category</label>
+    <select class="form-select" name="category">
+      <option value="">Select a Category</option>
+      <% categories.forEach(c => { %>
+        <option value="<%= c.category %>"><%= c.category %></option>
+      <% }) %>
+    </select>
+    <button class="btn btn-primary mt-2">Search</button>
+  </form>
+
+  <form action="/searchByLikes" class="mb-4">
+    <label class="form-label">Search by Likes Range</label>
+    <div class="row">
+      <div class="col">
+        <input type="number" class="form-control" name="minLikes" placeholder="Min Likes">
+      </div>
+      <div class="col">
+        <input type="number" class="form-control" name="maxLikes" placeholder="Max Likes">
+      </div>
+    </div>
+    <button class="btn btn-primary mt-2">Search</button>
+  </form>
+
+</div>
+
+<%- include("partials/footer.ejs") %>

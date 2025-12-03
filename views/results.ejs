@@ -1,0 +1,49 @@
+<%- include("partials/header.ejs") %>
+
+<div class="container p-4">
+
+  <h2 class="mb-4">Search Results</h2>
+
+  <% if (quotes.length === 0) { %>
+    <p>No results found.</p>
+  <% } %>
+
+  <% quotes.forEach(q => { %>
+    <p>
+      <%= q.quote %><br>
+      <em>
+        <a href="#" class="authorLink" data-id="<%= q.authorId %>">
+          <%= q.firstName %> <%= q.lastName %>
+        </a>
+      </em>
+    </p>
+  <% }) %>
+
+</div>
+
+<!-- AUTHOR MODAL -->
+<div class="modal fade" id="authorModal" tabindex="-1" aria-labelledby="authorModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">Author Information</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div id="authorInfo"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<script src="/js/scripts.js"></script>
+
+<%- include("partials/footer.ejs") %>

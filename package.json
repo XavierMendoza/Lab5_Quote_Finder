@@ -1,0 +1,15 @@
+{
+  "name": "Lab5_Quote_Finder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ejs": "^3.1.10",
+    "mysql2": "^3.9.1"
+  }
+}
