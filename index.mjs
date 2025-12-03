@@ -1,203 +1,137 @@
 import express from "express";
 import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-
-// Static folder
-app.use(express.static("public"));
-
-// Set EJS as view engine
 app.set("view engine", "ejs");
-app.set("views", "./views");
+app.set("views", path.join(__dirname, "views"));
+app.use(express.static(path.join(__dirname, "public")));
+app.use(express.urlencoded({ extended: true }));
 
+// -----------------------------------------
+// DATABASE CONNECTION (LOCAL + HEROKU)
+// -----------------------------------------
+let pool;
 
-const pool = mysql.createPool({
-  host: "127.0.0.1",
-  user: "root",
-  password: "root",               
-  database: "quoteFinder",
-  connectionLimit: 10,
-  waitForConnections: true
-});
+if (process.env.JAWSDB_URL) {
+  pool = mysql.createPool(process.env.JAWSDB_URL); // Heroku JawsDB
+  console.log("Connected to Heroku JawsDB");
+} else {
+  pool = mysql.createPool({
+    host: "127.0.0.1",
+    user: "root",
+    password: "root",
+    database: "quoteFinder",
+    connectionLimit: 10
+  });
+  console.log("Connected to LOCAL MySQL");
+}
 
+// -----------------------------------------
+// ROUTES
+// -----------------------------------------
 
-
+// Home Page with search forms
 app.get("/", async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
+  const authors = await pool.query("SELECT authorId, firstName, lastName FROM authors ORDER BY lastName");
+  const categories = await pool.query("SELECT DISTINCT category FROM quotes ORDER BY category");
 
-    // Authors for dropdown
-    const [authors] = await conn.query(
-      `SELECT authorId, firstName, lastName
-       FROM q_authors
-       ORDER BY lastName`
-    );
-
-    // Categories for dropdown
-    const [categories] = await conn.query(
-      `SELECT DISTINCT category
-       FROM q_quotes
-       ORDER BY category`
-    );
-
-    conn.release();
-
-    res.render("index", {
-      authors: authors,
-      categories: categories
-    });
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error loading homepage");
-  }
+  res.render("index", {
+    authors: authors[0],
+    categories: categories[0]
+  });
 });
 
-
-
+// Search by Keyword
 app.get("/searchByKeyword", async (req, res) => {
-  let keyword = req.query.keyword;
+  const keyword = `%${req.query.keyword}%`;
 
   const sql = `
-    SELECT quote, firstName, lastName, authorId
-    FROM q_quotes
-    NATURAL JOIN q_authors
-    WHERE quote LIKE ?
+    SELECT q.quoteId, q.quote, q.category, q.likes,
+           a.authorId, a.firstName, a.lastName
+    FROM quotes q
+    JOIN authors a ON q.authorId = a.authorId
+    WHERE q.quote LIKE ?;
   `;
 
-  const params = [`%${keyword}%`];
-
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(sql, params);
-    conn.release();
-
-    res.render("results", { quotes: rows });
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error searching by keyword");
-  }
+  const rows = await pool.query(sql, [keyword]);
+  res.render("results", { quotes: rows[0] });
 });
 
-
-
+// Search by Author
 app.get("/searchByAuthor", async (req, res) => {
-  let authorId = req.query.authorId;
+  const authorId = req.query.authorId;
 
   const sql = `
-    SELECT quote, firstName, lastName, authorId
-    FROM q_quotes
-    NATURAL JOIN q_authors
-    WHERE authorId = ?
+    SELECT q.quoteId, q.quote, q.category, q.likes,
+           a.authorId, a.firstName, a.lastName
+    FROM quotes q
+    JOIN authors a ON q.authorId = a.authorId
+    WHERE a.authorId = ?;
   `;
 
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(sql, [authorId]);
-    conn.release();
-
-    res.render("results", { quotes: rows });
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error searching by author");
-  }
+  const rows = await pool.query(sql, [authorId]);
+  res.render("results", { quotes: rows[0] });
 });
 
-
-
+// Search by Category
 app.get("/searchByCategory", async (req, res) => {
-  let category = req.query.category;
+  const category = req.query.category;
 
   const sql = `
-    SELECT quote, firstName, lastName, authorId
-    FROM q_quotes
-    NATURAL JOIN q_authors
-    WHERE category = ?
+    SELECT q.quoteId, q.quote, q.category, q.likes,
+           a.authorId, a.firstName, a.lastName
+    FROM quotes q
+    JOIN authors a ON q.authorId = a.authorId
+    WHERE q.category = ?;
   `;
 
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(sql, [category]);
-    conn.release();
-
-    res.render("results", { quotes: rows });
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error searching by category");
-  }
+  const rows = await pool.query(sql, [category]);
+  res.render("results", { quotes: rows[0] });
 });
 
-
-
+// Search by Likes Range
 app.get("/searchByLikes", async (req, res) => {
-  let minLikes = req.query.minLikes;
-  let maxLikes = req.query.maxLikes;
+  const minLikes = req.query.minLikes || 0;
+  const maxLikes = req.query.maxLikes || 99999;
 
   const sql = `
-    SELECT quote, firstName, lastName, authorId, likes
-    FROM q_quotes
-    NATURAL JOIN q_authors
-    WHERE likes BETWEEN ? AND ?
-    ORDER BY likes DESC
+    SELECT q.quoteId, q.quote, q.category, q.likes,
+           a.authorId, a.firstName, a.lastName
+    FROM quotes q
+    JOIN authors a ON q.authorId = a.authorId
+    WHERE q.likes BETWEEN ? AND ?;
   `;
 
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(sql, [minLikes, maxLikes]);
-    conn.release();
-
-    res.render("results", { quotes: rows });
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error searching by likes");
-  }
+  const rows = await pool.query(sql, [minLikes, maxLikes]);
+  res.render("results", { quotes: rows[0] });
 });
 
-
-
-app.get("/api/author/:id", async (req, res) => {
-  let authorId = req.params.id;
+// API: Get full author details (AJAX modal)
+app.get("/author/:id", async (req, res) => {
+  const authorId = req.params.id;
 
   const sql = `
     SELECT *
-    FROM q_authors
-    WHERE authorId = ?
+    FROM authors
+    WHERE authorId = ?;
   `;
 
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(sql, [authorId]);
-    conn.release();
-
-    res.json(rows);
-
-  } catch (err) {
-    console.log(err);
-    res.send("Error retrieving author info");
-  }
+  const rows = await pool.query(sql, [authorId]);
+  res.json(rows[0][0]);
 });
 
-
-
-app.get("/dbTest", async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query("SELECT CURDATE()");
-    conn.release();
-
-    res.send(rows);
-  } catch (err) {
-    console.log(err);
-    res.send("Database connection failed");
-  }
-});
-
-
-
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+// -----------------------------------------
+// START SERVER
+// -----------------------------------------
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
