@@ -1,118 +1,108 @@
 import express from "express";
-import mysql from "mysql2/promise";
+import mysql from "mysql2";
 import path from "path";
-import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+dotenv.config();
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-// Database connection (JawsDB MySQL)
-const db = await mysql.createConnection({
-  host: "uoa25ublaow4obx5.cbetxkdyhwsb.us-east-1.rds.amazonaws.com",
-  user: "dksu6i3j9gcow18g",
-  password: "dcoji93gtl2e2xac",
-  database: "dizza5mrlepkcz3f"
-});
+// View engine
+app.set("view engine", "ejs");
+app.set("views", path.join(process.cwd(), "views"));
 
 // Static files
-app.use(express.static(path.join(__dirname, "public")));
-app.set("views", path.join(__dirname, "views"));
-app.set("view engine", "ejs");
+app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 
+// DATABASE CONNECTION (Heroku uses env variable)
+const db = mysql.createConnection(process.env.JAWSDB_URL);
+
+db.connect((err) => {
+  if (err) {
+    console.error("DATABASE CONNECTION ERROR:", err);
+  } else {
+    console.log("Connected to MySQL (JawsDB)");
+  }
+});
 
 // HOME PAGE
-app.get("/", async (req, res) => {
-  res.render("index", {
-    authors: await getAuthors(),
-    categories: await getCategories()
+app.get("/", (req, res) => {
+  res.render("index");
+});
+
+// SEARCH BY KEYWORD
+app.get("/searchByKeyword", (req, res) => {
+  let keyword = `%${req.query.keyword}%`;
+  let sql = `
+      SELECT q.quoteId, q.quote, a.firstName, a.lastName, q.authorId
+      FROM q_quotes q
+      JOIN q_authors a ON q.authorId = a.authorId
+      WHERE q.quote LIKE ?;
+  `;
+  db.query(sql, [keyword], (err, rows) => {
+    if (err) return res.send("Database error.");
+    res.render("results", { quotes: rows });
   });
 });
 
-
-// Author Search
-app.get("/searchByAuthor", async (req, res) => {
+// SEARCH BY AUTHOR
+app.get("/searchByAuthor", (req, res) => {
   let sql = `
-    SELECT q.quote, a.firstName, a.lastName, q.authorId
-    FROM quotes q
-      JOIN authors a ON q.authorId = a.authorId
-    WHERE q.authorId = ?
+      SELECT q.quoteId, q.quote, a.firstName, a.lastName, q.authorId
+      FROM q_quotes q
+      JOIN q_authors a ON q.authorId = a.authorId
+      WHERE a.authorId = ?;
   `;
-  let rows = await db.execute(sql, [req.query.authorId]);
-  res.render("results", { quotes: rows[0] });
+  db.query(sql, [req.query.authorId], (err, rows) => {
+    if (err) return res.send("Database error.");
+    res.render("results", { quotes: rows });
+  });
 });
 
-
-// Keyword Search
-app.get("/searchByKeyword", async (req, res) => {
-  let keyword = `%${req.query.keyword}%`;
+// SEARCH BY CATEGORY
+app.get("/searchByCategory", (req, res) => {
   let sql = `
-    SELECT q.quote, a.firstName, a.lastName, q.authorId
-    FROM quotes q
-      JOIN authors a ON q.authorId = a.authorId
-    WHERE q.quote LIKE ?
+      SELECT q.quoteId, q.quote, a.firstName, a.lastName, q.authorId
+      FROM q_quotes q
+      JOIN q_authors a ON q.authorId = a.authorId
+      WHERE q.category = ?;
   `;
-  let rows = await db.execute(sql, [keyword]);
-  res.render("results", { quotes: rows[0] });
+  db.query(sql, [req.query.category], (err, rows) => {
+    if (err) return res.send("Database error.");
+    res.render("results", { quotes: rows });
+  });
 });
 
-
-// Category Search
-app.get("/searchByCategory", async (req, res) => {
+// SEARCH BY LIKES RANGE
+app.get("/searchByLikes", (req, res) => {
   let sql = `
-    SELECT q.quote, a.firstName, a.lastName, q.authorId
-    FROM quotes q
-      JOIN authors a ON q.authorId = a.authorId
-    WHERE q.category = ?
+      SELECT q.quoteId, q.quote, a.firstName, a.lastName, q.authorId
+      FROM q_quotes q
+      JOIN q_authors a ON q.authorId = a.authorId
+      WHERE q.likes BETWEEN ? AND ?;
   `;
-  let rows = await db.execute(sql, [req.query.category]);
-  res.render("results", { quotes: rows[0] });
+
+  db.query(
+    sql,
+    [req.query.minLikes, req.query.maxLikes],
+    (err, rows) => {
+      if (err) return res.send("Database error.");
+      res.render("results", { quotes: rows });
+    }
+  );
 });
 
-
-// Likes Range
-app.get("/searchByLikes", async (req, res) => {
-  let sql = `
-    SELECT q.quote, a.firstName, a.lastName, q.authorId
-    FROM quotes q
-      JOIN authors a ON q.authorId = a.authorId
-    WHERE q.likes BETWEEN ? AND ?
-  `;
-  let rows = await db.execute(sql, [
-    req.query.minLikes || 0,
-    req.query.maxLikes || 999999
-  ]);
-  res.render("results", { quotes: rows[0] });
+// API FOR MODAL POPUP
+app.get("/api/author/:id", (req, res) => {
+  const sql = `SELECT * FROM q_authors WHERE authorId = ?`;
+  db.query(sql, [req.params.id], (err, rows) => {
+    if (err) return res.json([]);
+    res.json(rows);
+  });
 });
 
-
-// API route used for modal window popup
-app.get("/api/author/:id", async (req, res) => {
-  let sql = `
-    SELECT *
-    FROM authors
-    WHERE authorId = ?
-  `;
-  let rows = await db.execute(sql, [req.params.id]);
-  res.json(rows[0]);
-});
-
-
-// Helper functions
-async function getAuthors() {
-  let sql = `SELECT * FROM authors ORDER BY lastName`;
-  let rows = await db.execute(sql);
-  return rows[0];
-}
-
-async function getCategories() {
-  let sql = `SELECT DISTINCT category FROM quotes ORDER BY category`;
-  let rows = await db.execute(sql);
-  return rows[0];
-}
-
-
-// DEFAULT PORT FOR HEROKU
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log("Server running on port", port);
+// START SERVER
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
