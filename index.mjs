@@ -1,137 +1,118 @@
 import express from "express";
 import mysql from "mysql2/promise";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
+
+// Database connection (JawsDB MySQL)
+const db = await mysql.createConnection({
+  host: "uoa25ublaow4obx5.cbetxkdyhwsb.us-east-1.rds.amazonaws.com",
+  user: "dksu6i3j9gcow18g",
+  password: "dcoji93gtl2e2xac",
+  database: "dizza5mrlepkcz3f"
+});
+
+// Static files
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.urlencoded({ extended: true }));
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "ejs");
 
-// -----------------------------------------
-// DATABASE CONNECTION (LOCAL + HEROKU)
-// -----------------------------------------
-let pool;
 
-if (process.env.JAWSDB_URL) {
-  pool = mysql.createPool(process.env.JAWSDB_URL); // Heroku JawsDB
-  console.log("Connected to Heroku JawsDB");
-} else {
-  pool = mysql.createPool({
-    host: "127.0.0.1",
-    user: "root",
-    password: "root",
-    database: "quoteFinder",
-    connectionLimit: 10
-  });
-  console.log("Connected to LOCAL MySQL");
-}
-
-// -----------------------------------------
-// ROUTES
-// -----------------------------------------
-
-// Home Page with search forms
+// HOME PAGE
 app.get("/", async (req, res) => {
-  const authors = await pool.query("SELECT authorId, firstName, lastName FROM authors ORDER BY lastName");
-  const categories = await pool.query("SELECT DISTINCT category FROM quotes ORDER BY category");
-
   res.render("index", {
-    authors: authors[0],
-    categories: categories[0]
+    authors: await getAuthors(),
+    categories: await getCategories()
   });
 });
 
-// Search by Keyword
-app.get("/searchByKeyword", async (req, res) => {
-  const keyword = `%${req.query.keyword}%`;
 
-  const sql = `
-    SELECT q.quoteId, q.quote, q.category, q.likes,
-           a.authorId, a.firstName, a.lastName
-    FROM quotes q
-    JOIN authors a ON q.authorId = a.authorId
-    WHERE q.quote LIKE ?;
-  `;
-
-  const rows = await pool.query(sql, [keyword]);
-  res.render("results", { quotes: rows[0] });
-});
-
-// Search by Author
+// Author Search
 app.get("/searchByAuthor", async (req, res) => {
-  const authorId = req.query.authorId;
-
-  const sql = `
-    SELECT q.quoteId, q.quote, q.category, q.likes,
-           a.authorId, a.firstName, a.lastName
+  let sql = `
+    SELECT q.quote, a.firstName, a.lastName, q.authorId
     FROM quotes q
-    JOIN authors a ON q.authorId = a.authorId
-    WHERE a.authorId = ?;
+      JOIN authors a ON q.authorId = a.authorId
+    WHERE q.authorId = ?
   `;
-
-  const rows = await pool.query(sql, [authorId]);
+  let rows = await db.execute(sql, [req.query.authorId]);
   res.render("results", { quotes: rows[0] });
 });
 
-// Search by Category
+
+// Keyword Search
+app.get("/searchByKeyword", async (req, res) => {
+  let keyword = `%${req.query.keyword}%`;
+  let sql = `
+    SELECT q.quote, a.firstName, a.lastName, q.authorId
+    FROM quotes q
+      JOIN authors a ON q.authorId = a.authorId
+    WHERE q.quote LIKE ?
+  `;
+  let rows = await db.execute(sql, [keyword]);
+  res.render("results", { quotes: rows[0] });
+});
+
+
+// Category Search
 app.get("/searchByCategory", async (req, res) => {
-  const category = req.query.category;
-
-  const sql = `
-    SELECT q.quoteId, q.quote, q.category, q.likes,
-           a.authorId, a.firstName, a.lastName
+  let sql = `
+    SELECT q.quote, a.firstName, a.lastName, q.authorId
     FROM quotes q
-    JOIN authors a ON q.authorId = a.authorId
-    WHERE q.category = ?;
+      JOIN authors a ON q.authorId = a.authorId
+    WHERE q.category = ?
   `;
-
-  const rows = await pool.query(sql, [category]);
+  let rows = await db.execute(sql, [req.query.category]);
   res.render("results", { quotes: rows[0] });
 });
 
-// Search by Likes Range
+
+// Likes Range
 app.get("/searchByLikes", async (req, res) => {
-  const minLikes = req.query.minLikes || 0;
-  const maxLikes = req.query.maxLikes || 99999;
-
-  const sql = `
-    SELECT q.quoteId, q.quote, q.category, q.likes,
-           a.authorId, a.firstName, a.lastName
+  let sql = `
+    SELECT q.quote, a.firstName, a.lastName, q.authorId
     FROM quotes q
-    JOIN authors a ON q.authorId = a.authorId
-    WHERE q.likes BETWEEN ? AND ?;
+      JOIN authors a ON q.authorId = a.authorId
+    WHERE q.likes BETWEEN ? AND ?
   `;
-
-  const rows = await pool.query(sql, [minLikes, maxLikes]);
+  let rows = await db.execute(sql, [
+    req.query.minLikes || 0,
+    req.query.maxLikes || 999999
+  ]);
   res.render("results", { quotes: rows[0] });
 });
 
-// API: Get full author details (AJAX modal)
-app.get("/author/:id", async (req, res) => {
-  const authorId = req.params.id;
 
-  const sql = `
+// API route used for modal window popup
+app.get("/api/author/:id", async (req, res) => {
+  let sql = `
     SELECT *
     FROM authors
-    WHERE authorId = ?;
+    WHERE authorId = ?
   `;
-
-  const rows = await pool.query(sql, [authorId]);
-  res.json(rows[0][0]);
+  let rows = await db.execute(sql, [req.params.id]);
+  res.json(rows[0]);
 });
 
-// -----------------------------------------
-// START SERVER
-// -----------------------------------------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+
+// Helper functions
+async function getAuthors() {
+  let sql = `SELECT * FROM authors ORDER BY lastName`;
+  let rows = await db.execute(sql);
+  return rows[0];
+}
+
+async function getCategories() {
+  let sql = `SELECT DISTINCT category FROM quotes ORDER BY category`;
+  let rows = await db.execute(sql);
+  return rows[0];
+}
+
+
+// DEFAULT PORT FOR HEROKU
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log("Server running on port", port);
 });

@@ -1,15 +1,16 @@
 {
-  "name": "Lab5_Quote_Finder",
+  "name": "quote-finder",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.mjs",
   "type": "module",
   "scripts": {
     "start": "node index.mjs"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
     "express": "^4.19.2",
-    "ejs": "^3.1.10",
-    "mysql2": "^3.9.1"
+    "ejs": "^3.1.9",
+    "mysql2": "^3.9.7"
   }
 }
